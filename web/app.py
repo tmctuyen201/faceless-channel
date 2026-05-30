@@ -249,10 +249,9 @@ async def generate_voice(script: str, duration: int, job: dict) -> str:
         return None
 
 async def create_video(script: str, persona: dict, duration: int, language: str, job: dict) -> str:
-    """Create social media quality video using the optimized generator."""
+    """Create dynamic video with real images, Ken Burns effects, and transitions."""
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-    from social_video_gen import generate_video as gen_social_video
     
     job_id = job["job_id"]
     output_path = f"/tmp/video_{job_id}.mp4"
@@ -260,29 +259,57 @@ async def create_video(script: str, persona: dict, duration: int, language: str,
     # Clean text for display
     clean_script = re.sub(r'\[.*?\]', '', script)
     
-    # Use the social media quality generator
-    result = gen_social_video(
-        script=clean_script,
-        persona_name=persona["name"],
-        duration=duration,
-        output_path=output_path
-    )
+    # Try dynamic generator first (real images + Ken Burns)
+    try:
+        from dynamic_video_gen import generate_video as gen_dynamic
+        # Extract persona key from persona dict
+        persona_key = None
+        for k, v in PERSONAS.items():
+            if v["name"] == persona["name"] or v == persona:
+                persona_key = k
+                break
+        if not persona_key:
+            persona_key = "cooking"
+        
+        result = gen_dynamic(
+            script=clean_script,
+            persona_name=persona_key,
+            duration=duration,
+            output_path=output_path
+        )
+        if result:
+            return output_path
+    except Exception as e:
+        print(f"Dynamic gen failed: {e}")
     
-    if result is None:
-        # Fallback to simple generation
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", f"color=c=0x0F3460:s=1080x1920:d={duration},format=yuv420p",
-            "-f", "lavfi", "-i", f"sine=frequency=220:duration={duration}",
-            "-vf", f"drawtext=text='{persona['name']}':fontsize=48:fontcolor=white:x=(w-text_w)/2:y=h*0.4:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "-c:v", "libx264", "-profile:v", "high", "-preset", "medium", "-crf", "20",
-            "-maxrate", "6M", "-bufsize", "12M",
-            "-r", "30", "-g", "60",
-            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
-            "-movflags", "+faststart", "-shortest",
-            output_path
-        ]
-        subprocess.run(cmd, capture_output=True, timeout=60)
+    # Fallback to social video generator
+    try:
+        from social_video_gen import generate_video as gen_social
+        result = gen_social(
+            script=clean_script,
+            persona_name=persona["name"],
+            duration=duration,
+            output_path=output_path
+        )
+        if result:
+            return output_path
+    except Exception as e:
+        print(f"Social gen failed: {e}")
+    
+    # Last resort: simple ffmpeg
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi", "-i", f"color=c=0x0F3460:s=1080x1920:d={duration},format=yuv420p",
+        "-f", "lavfi", "-i", f"sine=frequency=220:duration={duration}",
+        "-vf", f"drawtext=text='{persona['name']}':fontsize=48:fontcolor=white:x=(w-text_w)/2:y=h*0.4:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "-c:v", "libx264", "-profile:v", "high", "-preset", "medium", "-crf", "20",
+        "-maxrate", "6M", "-bufsize", "12M",
+        "-r", "30", "-g", "60",
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+        "-movflags", "+faststart", "-shortest",
+        output_path
+    ]
+    subprocess.run(cmd, capture_output=True, timeout=60)
     
     return output_path
 
